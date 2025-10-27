@@ -4,7 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { ChevronRight } from 'lucide-react';
 import { auth, db } from "@/lib/firebase";
 import { arrayUnion, collection, doc, getDoc, getDocs, query, updateDoc, where, addDoc, serverTimestamp, deleteDoc } from "firebase/firestore";
 import { useEffect, useState } from "react";
@@ -26,6 +28,8 @@ const FriendsPage = () => {
   const [username, setUsername] = useState("");
   const [friends, setFriends] = useState<Friend[]>([]);
   const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([]);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedFriend, setSelectedFriend] = useState<Friend | null>(null);
 
   useEffect(() => {
     const fetchFriendsAndRequests = async () => {
@@ -133,9 +137,42 @@ const FriendsPage = () => {
     setFriendRequests(prev => prev.filter(req => req.id !== requestId));
   };
 
+  const handleDeleteFriend = async () => {
+    if (!selectedFriend || !auth.currentUser) return;
+
+    try {
+      const currentUserUid = auth.currentUser.uid;
+      const friendId = selectedFriend.id;
+
+      // Remove from current user's friends array
+      const currentUserDocRef = doc(db, "users", currentUserUid);
+      const currentUserDocSnap = await getDoc(currentUserDocRef);
+      if (currentUserDocSnap.exists()) {
+        const currentFriends = currentUserDocSnap.data().friends || [];
+        await updateDoc(currentUserDocRef, { friends: currentFriends.filter((id: string) => id !== friendId) });
+      }
+
+      // Remove current user from friend's friends array
+      const friendUserDocRef = doc(db, "users", friendId);
+      const friendUserDocSnap = await getDoc(friendUserDocRef);
+      if (friendUserDocSnap.exists()) {
+        const friendFriends = friendUserDocSnap.data().friends || [];
+        await updateDoc(friendUserDocRef, { friends: friendFriends.filter((id: string) => id !== currentUserUid) });
+      }
+
+      setFriends(prevFriends => prevFriends.filter(friend => friend.id !== friendId));
+      toast.success(`${selectedFriend.username} has been removed from your friends.`);
+      setIsModalOpen(false);
+      setSelectedFriend(null);
+    } catch (error) {
+      console.error("Error deleting friend: ", error);
+      toast.error("Error deleting friend.");
+    }
+  };
+
   return (
     <div className="w-full max-w-2xl mx-auto">
-      <Card className="mb-8">
+      <Card className="mb-12">
         <CardHeader>
           <CardTitle>Add a Friend</CardTitle>
         </CardHeader>
@@ -156,30 +193,32 @@ const FriendsPage = () => {
           <TabsTrigger value="friends">My Friends</TabsTrigger>
           <TabsTrigger value="requests">Friend Requests</TabsTrigger>
         </TabsList>
-        <TabsContent value="friends">
-          <Card>
-            <CardContent>
-              {friends.length > 0 ? (
-                <ul className="space-y-4">
-                  {friends.map((friend) => (
-                    <li key={friend.id} className="flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <Avatar>
-                          <AvatarImage src={`https://api.dicebear.com/6.x/initials/svg?seed=${friend.username}`} />
-                          <AvatarFallback>{friend.username.charAt(0)}</AvatarFallback>
-                        </Avatar>
-                        <span>{friend.username}</span>
-                      </div>
-                      <span className="text-muted-foreground">{friend.coins} coins</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-center text-muted-foreground">You have no friends yet.</p>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+                <TabsContent value="friends">
+                  {friends.length > 0 ? (
+                    <ul className="space-y-4">
+                                        {friends.map((friend) => (
+                                          <Card key={friend.id} className="flex items-center justify-between p-6 cursor-pointer" onClick={() => {
+                                            setSelectedFriend(friend);
+                                            setIsModalOpen(true);
+                                          }}>
+                                            <div className="flex items-center gap-4 w-full">
+                                              <Avatar className="w-10 h-10">
+                                                <AvatarImage src={`https://api.dicebear.com/6.x/initials/svg?seed=${friend.username}`} />
+                                                <AvatarFallback className="text-sm">{friend.username.charAt(0)}</AvatarFallback>
+                                              </Avatar>
+                                              <span className="font-semibold text-lg">{friend.username}</span>
+                                              <div className="flex items-center gap-10 ml-auto">
+                                                <span className="text-muted-foreground text-base">{friend.coins} coins</span>
+                                                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                                              </div>
+                                            </div>
+                                          </Card>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-center text-muted-foreground">You have no friends yet.</p>
+                  )}
+                </TabsContent>
         <TabsContent value="requests">
           <Card>
             <CardContent className="pt-6">
@@ -208,6 +247,23 @@ const FriendsPage = () => {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Manage Friend</DialogTitle>
+            <DialogDescription>
+              {selectedFriend ? `What do you want to do with ${selectedFriend.username}?` : ''}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="destructive" onClick={handleDeleteFriend}>Delete Friend</Button>
+            <DialogClose asChild>
+              <Button variant="outline">Cancel</Button>
+            </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

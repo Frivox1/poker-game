@@ -3,13 +3,15 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Home, Users, BarChart, LogOut } from 'lucide-react';
+import { Users, BarChart, LogOut } from 'lucide-react';
 import Link from 'next/link';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
-
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { GiPokerHand } from "react-icons/gi";
+import { CgCardSpades } from "react-icons/cg";
+import { PiPokerChip } from "react-icons/pi";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -19,50 +21,61 @@ interface LayoutProps {
 export const Layout = ({ children, title }: LayoutProps) => {
   const [displayName, setDisplayName] = useState<string | null>(null);
   const [coins, setCoins] = useState<number | null>(null);
+  const [userChecked, setUserChecked] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
-    const storedUsername = localStorage.getItem('username');
-    const storedCoins = localStorage.getItem('coins');
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        router.push('/login');
+        return;
+      }
 
-    if (storedUsername && storedCoins) {
-      setDisplayName(storedUsername);
-      setCoins(Number(storedCoins));
-    } else {
-      const unsubscribe = onAuthStateChanged(auth, async (user) => {
-        if (user) {
-          console.log('Fetching user data from Firestore...');
-          const userDocRef = doc(db, "users", user.uid);
-          const userDocSnap = await getDoc(userDocRef);
-          if (userDocSnap.exists()) {
-            const userData = userDocSnap.data();
-            setDisplayName(userData.username);
-            setCoins(userData.coins);
-            localStorage.setItem('username', userData.username);
-            localStorage.setItem('coins', String(userData.coins));
-          } else {
-            router.push('/login');
-          }
+      try {
+        const userDocRef = doc(db, "users", user.uid);
+        const userDocSnap = await getDoc(userDocRef);
+        if (userDocSnap.exists()) {
+          const userData = userDocSnap.data();
+          setDisplayName(
+            userData.username || 
+            user.displayName || 
+            user.email?.split('@')[0] || 
+            'Utilisateur'
+          );
+          setCoins(userData.coins ?? 0);
         } else {
-          router.push('/login');
+          setDisplayName(user.displayName || user.email?.split('@')[0] || 'Utilisateur');
+          setCoins(0);
         }
-      });
-      return () => unsubscribe();
-    }
+      } catch (err) {
+        console.error('Error fetching user:', err);
+      } finally {
+        setUserChecked(true);
+      }
+    });
+
+    return () => unsubscribe();
   }, [router]);
 
   const handleLogout = async () => {
     await auth.signOut();
-    localStorage.removeItem('username');
-    localStorage.removeItem('coins');
     router.push('/login');
   };
 
   const navLinks = [
-    { href: '/menu', label: 'Home', icon: Home },
+    { href: '/menu', label: 'Poker', icon: GiPokerHand },
+    { href: '/blackjack', label: 'Blackjack', icon: CgCardSpades },
     { href: '/friends', label: 'Friends', icon: Users },
     { href: '/leaderboard', label: 'Leaderboard', icon: BarChart },
   ];
+
+  if (!userChecked) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <p className="text-gray-500">Loading...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="grid min-h-screen w-full lg:grid-cols-[280px_1fr]">
@@ -70,7 +83,7 @@ export const Layout = ({ children, title }: LayoutProps) => {
         <div className="flex h-full max-h-screen flex-col gap-2">
           <div className="flex h-[60px] items-center px-6">
             <Link className="flex items-center gap-2 font-semibold" href="#">
-              <span>Poker Game</span>
+              <span>Casino Online</span>
             </Link>
           </div>
           <div className="flex-1 overflow-auto py-2">
@@ -90,11 +103,11 @@ export const Layout = ({ children, title }: LayoutProps) => {
           <div className="mt-auto p-4">
             <div className="flex items-center gap-2 mb-4 w-full">
               <div>
-              <span className="text-lg font-medium">{displayName}</span>
+                <span className="text-lg font-medium">{displayName}</span>
               </div>
               <div className="ml-auto flex items-center gap-2">
-              <span className="text-sm text-gray-500">Coins:</span>
-              <span className="text-sm font-medium">{coins}</span>
+                <span className="text-sm font-medium">{coins}</span>
+                <PiPokerChip className="h-6 w-6 size-6" />
               </div>
             </div>
             <Button variant="outline" onClick={handleLogout} className="w-full">
@@ -105,16 +118,16 @@ export const Layout = ({ children, title }: LayoutProps) => {
       </div>
       <div className="flex flex-col">
         <header className="flex h-14 lg:h-[60px] items-center gap-4 border-b bg-gray-100/40 px-6 dark:bg-gray-800/40">
-            <Link className="lg:hidden" href="#">
-                <span className="sr-only">Home</span>
-            </Link>
-            <div className="w-full flex-1">
-                <h1 className="text-lg font-semibold">{title}</h1>
-            </div>
-            <ThemeToggle />
+          <Link className="lg:hidden" href="#">
+            <span className="sr-only">Home</span>
+          </Link>
+          <div className="w-full flex-1">
+            <h1 className="text-lg font-semibold">{title}</h1>
+          </div>
+          <ThemeToggle />
         </header>
         <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-6 items-center justify-center">
-            {children}
+          {children}
         </main>
       </div>
     </div>

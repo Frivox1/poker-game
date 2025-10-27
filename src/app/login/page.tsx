@@ -16,9 +16,8 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { useRouter } from 'next/navigation';
 import Image from "next/image";
-import { auth, db } from '@/lib/firebase';
+import { auth } from '@/lib/firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
 
 const formSchema = z.object({
   email: z.string().email(),
@@ -37,17 +36,7 @@ const LoginPage = () => {
 
   const onSubmit = async (data: z.infer<typeof formSchema>) => {
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, data.email, data.password);
-      const user = userCredential.user;
-
-      const userDocRef = doc(db, "users", user.uid);
-      const userDocSnap = await getDoc(userDocRef);
-
-      if (userDocSnap.exists()) {
-        localStorage.setItem('username', userDocSnap.data().username);
-      } else {
-        localStorage.setItem('username', user.email || 'Guest');
-      }
+      await signInWithEmailAndPassword(auth, data.email, data.password);
       router.push('/menu');
     } catch (error: any) {
       console.error('Error signing in', error);

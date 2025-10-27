@@ -17,7 +17,7 @@ import { z } from "zod";
 import { useRouter } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { doc, setDoc } from 'firebase/firestore';
 import Image from "next/image";
 
 const formSchema = z.object({
@@ -47,11 +47,12 @@ const SignUpPage = () => {
       await setDoc(doc(db, "users", user.uid), {
         email: user.email,
         username: data.username,
+        coins: 1000,
       });
 
       localStorage.setItem('username', data.username);
       router.push('/menu');
-    } catch (error: any) {
+    } catch (error: Error) {
       console.error('Error signing up', error);
       form.setError("email", { message: error.message });
     }
